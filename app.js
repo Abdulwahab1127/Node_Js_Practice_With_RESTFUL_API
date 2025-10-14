@@ -4,13 +4,42 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const mongoose = require('mongoose');
 require('dotenv').config();
+const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
 
 const feedRoutes = require('./routes/feed');
 const e = require('express');
 
-app.use(express.json()); 
+app.use(express.json());
 app.use(bodyParser.json()); // application/json     
-app.use('/images', express.static(path.join(__dirname, 'images')));
+app.use('/images', express.static(path.join(__dirname, 'images'))); // to serve images statically
+
+
+// MULTER SETUP 
+const storage = multer.diskStorage({
+    destination: function(req, file, cb) {
+        cb(null, 'images');
+    },
+    filename: function(req, file, cb) {
+        cb(null, uuidv4())
+    }
+});
+
+// File filter for multer to accept only certain file types
+const fileFilter = (req, file, cb) => {
+    if(
+        file.mimetype === 'image/png' || 
+        file.mimetype === 'image/jpg' || 
+        file.mimetype === 'image/jpeg'
+      ){
+        cb(null, true);
+    }else{
+        cb(null, false);
+    }
+
+}
+
+app.use(multer({ storage: storage, fileFilter: fileFilter }).single('image')); // for handling multipart/form-data
 
 // CORS HEADERS SETUP 
 app.use((req, res, next) => {
