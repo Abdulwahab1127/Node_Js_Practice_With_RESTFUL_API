@@ -7,9 +7,11 @@ require('dotenv').config();
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 
+// IMPORT ROUTES
 const feedRoutes = require('./routes/feed');
-const e = require('express');
+const authRoutes = require('./routes/auth');
 
+// MIDDLEWARE SETUP
 app.use(express.json());
 app.use(bodyParser.json()); // application/json     
 app.use('/images', express.static(path.join(__dirname, 'images'))); // to serve images statically
@@ -38,7 +40,7 @@ const fileFilter = (req, file, cb) => {
     }
 
 }
-
+// Single file upload setup
 app.use(multer({ storage: storage, fileFilter: fileFilter }).single('image')); // for handling multipart/form-data
 
 // CORS HEADERS SETUP 
@@ -46,15 +48,21 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   next();
 });
 
-app.use('/feed', feedRoutes);
-
+// Basic route
 app.get('/', (req, res) => {
   res.send('Hello from RESTful API Practice!');
 });
 
+// Routes which handle requests
+app.use('/auth', authRoutes);
+app.use('/feed', feedRoutes);
+
+
+// Error handling middleware
 app.use((error, req, res, next) => {
   console.log(error);
   const status = error.statusCode || 500;
@@ -62,6 +70,7 @@ app.use((error, req, res, next) => {
   res.status(status).json({ message: message });
 })
 
+// Connect to MongoDB and start the server
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(result =>{
