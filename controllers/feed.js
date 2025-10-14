@@ -6,13 +6,25 @@ const fs = require('fs');
 
 // GET /feed/posts - return all posts
 exports.getPosts = (req, res) => {
+
+    const currentPage = req.query.page || 1;
+    const perPage = 2;
+    let totalItems;
+
+
     Post.find()
     .then(posts =>{
-        
+        totalItems = posts.length;
+        return Post.find()
+            .skip((currentPage - 1) * perPage)
+            .limit(perPage);
+    })
+    .then(posts =>{
         res.status(200).json(
             {   
                 message: 'Posts fetched successfully!',
-                posts: posts
+                posts: posts,
+                totalItems: totalItems
             }
         );
 
