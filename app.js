@@ -10,6 +10,7 @@ const multer = require('multer');
 // IMPORT ROUTES
 const feedRoutes = require('./routes/feed');
 const authRoutes = require('./routes/auth');
+const userStatusRoutes = require('./routes/userStatus');
 
 // MIDDLEWARE SETUP
 app.use(express.json());
@@ -60,6 +61,7 @@ app.get('/', (req, res) => {
 // Routes which handle requests
 app.use('/auth', authRoutes);
 app.use('/feed', feedRoutes);
+app.use('/user', userStatusRoutes);
 
 
 // Error handling middleware

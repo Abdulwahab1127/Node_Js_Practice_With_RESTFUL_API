@@ -1,9 +1,10 @@
 const User = require('../models/user');
 const { validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 
-exports.signup = (req, res, next) => {debugger
+exports.signup = (req, res, next) => {
     
 
     const errors = validationResult(req);
@@ -37,5 +38,52 @@ exports.signup = (req, res, next) => {debugger
         next(err);
     });
 };
-exports.login = (req, res, next) => {};
+exports.login = (req, res, next) => {
+
+    const email = req.body.email;
+    const password = req.body.password;
+    
+    let userCredentials;
+
+    User.findOne({email: email})
+    .then(user =>{
+        if(!user){
+            const error = new Error("No User Found Against This Email");
+            error.statusCode = 401;
+            return next(error); // safer in async flow
+        }
+
+        userCredentials = user;
+        return bcrypt.compare(password, user.password);
+
+    })
+    .then(isEqual=>{
+        if(!isEqual){
+            const error = new Error("Wrong Password");
+            error.statusCode = 401;
+            return next(error); // safer in async flow
+        }
+
+        const token = jwt.sign
+        (   
+            { 
+                userId: userCredentials._id.toString(),// convert to string to avoid issues
+                email: userCredentials.email 
+            }, 
+        'thisissomesuperdupersecretkey', 
+            { 
+                expiresIn: '1h' 
+            }
+        );
+
+        res.status(200).json({token : token, userId: userCredentials._id.toString()});
+    })
+    
+    .catch(err => {
+        if (!err.statusCode) {
+            err.statusCode = 500;
+        }
+        next(err);
+    });
+}
 

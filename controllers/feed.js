@@ -3,6 +3,8 @@ const path = require('path');
 const { validationResult } = require('express-validator');
 const Post = require('../models/post');
 const fs = require('fs');
+const User = require('../models/user');
+
 
 // GET /feed/posts - return all posts
 exports.getPosts = (req, res) => {
@@ -38,6 +40,7 @@ exports.getPosts = (req, res) => {
 
 // POST /feed/post - create a post
 exports.createPosts =(req,res,next)=>{
+
     const errors = validationResult(req);
     if(!errors.isEmpty()){
 
@@ -54,21 +57,37 @@ exports.createPosts =(req,res,next)=>{
     const title = req.body.title;
     const content = req.body.content;
     const imageUrl = req.file.path.replace("\\" ,"/");
+    let creator;
     // Store post in database
 
     const post = new Post({
         title: title,
         content: content,
         imageUrl: imageUrl,
-        creator: { name: 'Abdul Wahab' }
-    })
+        creator: req.userId
+    });
 
-        post.save()
-        .then(result=>{
-            res.status(201).json({
-                message: "Post created successfully!",
-                post: result
+    post.save()
+        .then(result => {
+            return User.findById(req.userId)   
+            .then(user =>{
+                user.posts.push(post); // add post to user's posts array
+                creator = user; // store user details to send back in response
+                return user.save();
             })
+            .then(result =>{
+                res.status(201).json({
+                    message: "Post created successfully!",
+                    post: post,// send back the post created
+                    creator:{_id: creator._id, name: creator.name} // send back user details also
+                });
+
+            }).catch(err=>{
+                if(!err.statusCode){
+                    err.statusCode = 500;
+                }
+                next(err);
+            });
         })
         .catch(err=>{
             if(!err.statusCode){
@@ -102,56 +121,62 @@ exports.getPost = (req, res, next) => {
 
 // PUT /feed/post/:postId - update a post
 exports.updatePost = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const err = new Error('Validation Failed/Incorrect Data');
+    err.statusCode = 422;
+    throw err;
+  }
 
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
+  const postId = req.params.postId;
+  const title = req.body.title;
+  const content = req.body.content;
+  let imageUrl = req.body.image; // fallback
 
-        const err = new Error('Validation Failed/Incorrect Data');
-        err.statusCode = 422;
-        throw err;
-    }
+  if (req.file) {
+    imageUrl = req.file.path.replace("\\", "/");
+  }
 
-    const postId = req.params.postId;
-    const title = req.body.title;
-    const content = req.body.content;
-    let imageUrl = req.body.image; // In case image is not updated
-
-    if(req.file){
-        imageUrl = req.file.path.replace("\\" ,"/");
-    }  
-    if(!imageUrl){
-        const error = new Error('No file picked.');
-        error.statusCode = 422;
+  Post.findById(postId)
+    .then(post => {
+      if (!post) {
+        const error = new Error('Error Finding the Post');
+        error.statusCode = 404;
         throw error;
-    }
+      }
 
-    Post.findById(postId)
-        .then(post =>{
-            if(!post){
-                const error = new Error('Error Finding the Post');
-                error.statusCode = 404;
-                throw error;
-            }
-            if(imageUrl !== post.imageUrl){
-                clearImage(post.imageUrl);
-            }
-            post.title = title;
-            post.content = content;
-            post.imageUrl = imageUrl;
-            return post.save();
+      if (post.creator.toString() !== req.userId) {
+        const error = new Error('Not authorized!');
+        error.statusCode = 403;
+        throw error;
+      }
 
-        })
-        .then(result =>{
-            res.status(200).json({message: 'Post updated!', post: result});
-        })
-        .catch(err=>{
-        if(!err.statusCode){
-            err.statusCode = 500;
-        }
-        next(err);
+      // ✅ Check AFTER fetching post
+      if (!imageUrl) {
+        imageUrl = post.imageUrl; // keep old image
+      }
+
+      // If a new image is uploaded, delete the old one
+      if (imageUrl !== post.imageUrl) {
+        clearImage(post.imageUrl);
+      }
+
+      post.title = title;
+      post.content = content;
+      post.imageUrl = imageUrl;
+      return post.save();
+    })
+    .then(result => {
+      res.status(200).json({ message: 'Post updated!', post: result });
+    })
+    .catch(err => {
+      if (!err.statusCode) {
+        err.statusCode = 500;
+      }
+      next(err);
     });
-
 };
+
 
 // DELETE /feed/post/:postId - delete a post
 exports.deletePost = (req, res, next) => {
@@ -165,14 +190,28 @@ exports.deletePost = (req, res, next) => {
                 error.statusCode = 404;
                 throw error;
             }
+            
+            // Check logged in user is the creator of the post
+            if (post.creator.toString() !== req.userId) {
+            const error = new Error('Not authorized!');
+            error.statusCode = 403;
+            throw error;
+            }
             // Check logged in user
 
             // Delete image
             clearImage(post.imageUrl);
             return Post.deleteOne({ _id: postId });
 
-        }).then(result =>{
-            console.log(result);
+        })
+        .then(result =>{
+            return User.findById(req.userId);
+        })
+        .then(user =>{
+            user.posts.pull(postId); // remove post from user's posts array
+            return user.save();
+        })
+        .then(result =>{
             res.status(200).json({message: 'Post deleted!'});
         })
         .catch(err=>{
