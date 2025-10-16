@@ -6,7 +6,8 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
-
+const http = require('http');
+const socket = require('./socket');
 // IMPORT ROUTES
 const feedRoutes = require('./routes/feed');
 const authRoutes = require('./routes/auth');
@@ -75,9 +76,16 @@ app.use((error, req, res, next) => {
 // Connect to MongoDB and start the server
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(result =>{
-    app.listen(8080, () => console.log('🚀 Server running on http://localhost:8080')) ;
+  .then(result => {
+    // ✅ Create HTTP server from Express
+    const server = http.createServer(app);
+
+    // ✅ Initialize socket.io (using our helper)
+    const io = socket.init(server);
+
+    // ✅ Start listening after Socket.IO is attached
+    server.listen(8080, () => {
+      console.log('🚀 Server running on http://localhost:8080');
+    });
   })
-  .catch(err => {
-    console.log(err);
-  });
+  .catch(err => console.log(err));

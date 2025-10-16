@@ -1,9 +1,9 @@
-const express = require('express');
 const path = require('path');
 const { validationResult } = require('express-validator');
 const Post = require('../models/post');
 const fs = require('fs');
 const User = require('../models/user');
+const io = require('../socket');
 
 
 // GET /feed/posts - return all posts
@@ -75,6 +75,21 @@ exports.createPosts = async (req, res, next) => {
 
     user.posts.push(post);
     await user.save();
+
+    // Emit socket event to notify clients of new post
+    const postData = {
+      ...post._doc,
+      id: post._id.toString(),
+      creator: {
+        _id: req.userId,
+        name: user.name
+      }
+    };
+    io.getIO().emit('posts', { action: 'create', post: postData });
+
+
+
+    // Respond with created post
 
     res.status(201).json({
       message: 'Post created successfully!',
