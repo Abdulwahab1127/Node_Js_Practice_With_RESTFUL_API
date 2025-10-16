@@ -18,6 +18,7 @@ exports.getPosts = async (req, res, next) => {
     // Get posts for the current page
     const posts = await Post.find()
       .populate('creator')
+      .sort({ createdAt: -1 })
       .skip((currentPage - 1) * perPage)
       .limit(perPage);
 
@@ -132,6 +133,7 @@ exports.getPost = async (req, res, next) => {
 
 // PUT /feed/post/:postId - update a post
 exports.updatePost = async (req, res, next) => {
+  
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -149,14 +151,14 @@ exports.updatePost = async (req, res, next) => {
       imageUrl = req.file.path.replace("\\", "/");
     }
 
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).populate('creator');
     if (!post) {
       const error = new Error('Error Finding the Post');
       error.statusCode = 404;
       throw error;
     }
 
-    if (post.creator.toString() !== req.userId) {
+    if (post.creator._id.toString() !== req.userId) {
       const error = new Error('Not authorized!');
       error.statusCode = 403;
       throw error;
@@ -178,9 +180,20 @@ exports.updatePost = async (req, res, next) => {
 
     const result = await post.save();
 
+    const postData = {
+      ...result._doc,
+      id: result._id.toString(),
+      creator: {
+        _id: post.creator._id.toString(),
+        name: post.creator.name
+      }
+    };
+
+    io.getIO().emit('posts', { action: 'update', post: postData });
+
     res.status(200).json({
       message: 'Post updated!',
-      post: result,
+      post: postData,
     });
   } catch (err) {
     if (!err.statusCode) {
@@ -211,8 +224,7 @@ exports.deletePost = async (req, res, next) => {
       throw error;
     }
 
-    // Delete image file
-    clearImage(post.imageUrl);
+  
 
     // Delete post from DB
     await Post.deleteOne({ _id: postId });
@@ -220,9 +232,13 @@ exports.deletePost = async (req, res, next) => {
     // Remove post reference from user
     const user = await User.findById(req.userId);
     if (user) {
-      user.posts.pull(postId);
+      user.posts.pull(postId); // remove postId from posts array
+        // Delete image file
+      clearImage(post.imageUrl); 
       await user.save();
     }
+
+    io.getIO().emit('posts', { action: 'delete', post: post });
 
     res.status(200).json({ message: 'Post deleted!' });
   } catch (err) {
